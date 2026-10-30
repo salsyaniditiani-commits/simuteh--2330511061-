@@ -1,1 +1,154 @@
-{"cells":[{"cell_type":"code","source":["import os\n","import csv\n","import cv2\n","import numpy as np\n","\n","SEED = 1061\n","N_PER_KELAS = 20\n","H, W = 480, 640\n","\n","KELAS = [\"sehat\", \"ringan\", \"berat\"]\n","KONDISI = [\"normal\", \"gelap\", \"terang\", \"kontras_rendah\", \"bayangan\"]\n","OUT =  os.path.join(\"data\", \"sintetis\")\n","\n","rng = np.random.default_rng(SEED)\n","\n","\n","def gambar_daun(img, mask):\n","    cx = int(rng.integers(260, 380))\n","    cy = int(rng.integers(200, 280))\n","    ax = int(rng.integers(190, 240))\n","    ay = int(rng.integers(95, 125))\n","    sudut = float(rng.uniform(-25, 25))\n","\n","    hijau = np.array([\n","        rng.integers(35, 60),\n","        rng.integers(120, 150),\n","        rng.integers(45, 75)\n","    ])\n","\n","    cv2.ellipse(img, (cx, cy), (ax, ay), sudut, 0, 360,\n","                hijau.tolist(), -1)\n","    cv2.ellipse(mask, (cx, cy), (ax, ay), sudut, 0, 360, 255, -1)\n","\n","    t = np.deg2rad(sudut)\n","    p1 = (int(cx - ax * np.cos(t)), int(cy - ax * np.sin(t)))\n","    p2 = (int(cx + ax * np.cos(t)), int(cy + ax * np.sin(t)))\n","    tulang = (hijau * 1.35).clip(0, 255).tolist()\n","\n","    cv2.line(img, p1, p2, tulang, 3)\n","\n","    for k in np.linspace(-0.7, 0.7, 6):\n","        bx = cx + k * ax * np.cos(t)\n","        by = cy + k * ax * np.sin(t)\n","\n","        for arah in (-1, 1):\n","            ex = bx + 0.35 * ax * np.cos(t + arah * 1.0)\n","            ey = by + 0.35 * ax * np.sin(t + arah * 1.0)\n","            cv2.line(img, (int(bx), int(by)),\n","                     (int(ex), int(ey)), tulang, 1)\n","\n","    return mask\n","\n","\n","def gambar_bercak(img, mask_daun, mask_bercak, kelas):\n","    if kelas == \"sehat\":\n","        return\n","\n","    n = (int(rng.integers(1, 4)) if kelas == \"ringan\"\n","         else int(rng.integers(6, 13)))\n","\n","    r_min, r_maks = ((3, 7) if kelas == \"ringan\" else (5, 14))\n","    ys, xs = np.where(mask_daun > 0)\n","\n","    for _ in range(n):\n","        i = int(rng.integers(0, len(xs)))\n","        r = int(rng.integers(r_min, r_maks + 1))\n","        pusat = (int(xs[i]), int(ys[i]))\n","\n","        warna = [\n","            int(rng.integers(70, 100)),\n","            int(rng.integers(165, 190)),\n","            int(rng.integers(185, 210))\n","        ]\n","\n","        cv2.circle(img, pusat, r + 2, (40, 80, 110), -1)\n","        cv2.circle(img, pusat, r, warna, -1)\n","        cv2.circle(mask_bercak, pusat, r + 2, 255, -1)\n","\n","    mask_bercak &= mask_daun\n","\n","\n","def ganggu_cahaya(img, kondisi):\n","    f = img.astype(np.float32)\n","\n","    if kondisi == \"gelap\":\n","        f = 255 * (f / 255) ** 2.0\n","    elif kondisi == \"terang\":\n","        f = 255 * (f / 255) ** 0.45\n","    elif kondisi == \"kontras_rendah\":\n","        f = 0.35 * f + 95\n","    elif kondisi == \"bayangan\":\n","        gx = np.linspace(1.15, 0.30, W, dtype=np.float32)\n","        f = f * gx[None, :, None]\n","\n","    sigma = float(rng.uniform(6, 14))\n","    f = f + rng.normal(0, sigma, f.shape)\n","\n","    return np.clip(f, 0, 255).astype(np.uint8)\n","\n","\n","def main():\n","    for sub in [\"citra\", \"bersih\", \"mask_daun\", \"mask_bercak\"]:\n","        os.makedirs(os.path.join(OUT, sub), exist_ok=True)\n","\n","    baris = []\n","    nomor = 0\n","\n","    for kelas in KELAS:\n","        for j in range(N_PER_KELAS):\n","            nomor += 1\n","\n","            latar = np.array([\n","                rng.integers(150, 190),\n","                rng.integers(170, 205),\n","                rng.integers(185, 215)\n","            ])\n","\n","            img = np.ones((H, W, 3), np.uint8) * latar.astype(np.uint8)\n","            img = cv2.add(\n","                img,\n","                rng.integers(0, 12, (H, W, 3)).astype(np.uint8)\n","            )\n","\n","            m_daun = np.zeros((H, W), np.uint8)\n","            m_bercak = np.zeros((H, W), np.uint8)\n","\n","            gambar_daun(img, m_daun)\n","            gambar_bercak(img, m_daun, m_bercak, kelas)\n","\n","            bersih = cv2.GaussianBlur(img, (3, 3), 0.8)\n","            kondisi = KONDISI[j % len(KONDISI)]\n","            citra = ganggu_cahaya(bersih, kondisi)\n","            nama = f\"teh_{nomor:03d}.png\"\n","\n","            cv2.imwrite(os.path.join(OUT, \"citra\", nama), citra)\n","            cv2.imwrite(os.path.join(OUT, \"bersih\", nama), bersih)\n","            cv2.imwrite(os.path.join(OUT, \"mask_daun\", nama), m_daun)\n","            cv2.imwrite(os.path.join(OUT, \"mask_bercak\", nama), m_bercak)\n","\n","            persen = 100 * (m_bercak > 0).sum() / max((m_daun > 0).sum(), 1)\n","            baris.append([nama, kelas, kondisi, round(persen, 2)])\n","\n","    with open(os.path.join(OUT, \"label.csv\"), \"w\", newline=\"\") as f:\n","        w = csv.writer(f)\n","        w.writerow([\n","            \"nama_file\", \"kelas\", \"kondisi_cahaya\", \"persen_bercak\"\n","        ])\n","        w.writerows(baris)\n","\n","    print(f\"Selesai: {nomor} citra tersimpan di {OUT}\")\n","\n","\n","if __name__ == \"__main__\":\n","    main()"],"metadata":{"id":"le8y4q09I73h","executionInfo":{"status":"ok","timestamp":1793353596156,"user_tz":-420,"elapsed":4777,"user":{"displayName":"SALSYA PURITA NIDITIANI","userId":"00816041196831444194"}},"outputId":"aa0ea71f-7579-4c87-9f6f-254820806479","colab":{"base_uri":"https://localhost:8080/"}},"execution_count":1,"outputs":[{"output_type":"stream","name":"stdout","text":["Selesai: 60 citra tersimpan di data/sintetis\n"]}]},{"cell_type":"code","source":["from google.colab import drive\n","drive.mount('/content/drive')"],"metadata":{"id":"vLJEMh0zLzKO","executionInfo":{"status":"ok","timestamp":1793353319354,"user_tz":-420,"elapsed":1618,"user":{"displayName":"","userId":""}},"outputId":"6a61134b-f8a4-42e3-93e1-785558a489cf","colab":{"base_uri":"https://localhost:8080/"}},"execution_count":null,"outputs":[{"output_type":"stream","name":"stdout","text":["Drive already mounted at /content/drive; to attempt to forcibly remount, call drive.mount(\"/content/drive\", force_remount=True).\n"]}]}],"metadata":{"colab":{"provenance":[{"file_id":"/v2/external/notebooks/intro.ipynb","timestamp":1793353517932}]},"kernelspec":{"display_name":"Python 3","name":"python3"}},"nbformat":4,"nbformat_minor":0}
+import os
+import csv
+import cv2
+import numpy as np
+
+SEED = 1061
+N_PER_KELAS = 20
+H, W = 480, 640
+
+KELAS = ["sehat", "ringan", "berat"]
+KONDISI = ["normal", "gelap", "terang", "kontras_rendah", "bayangan"]
+OUT =  os.path.join("data", "sintetis")
+
+rng = np.random.default_rng(SEED)
+
+
+def gambar_daun(img, mask):
+    cx = int(rng.integers(260, 380))
+    cy = int(rng.integers(200, 280))
+    ax = int(rng.integers(190, 240))
+    ay = int(rng.integers(95, 125))
+    sudut = float(rng.uniform(-25, 25))
+
+    hijau = np.array([
+        rng.integers(35, 60),
+        rng.integers(120, 150),
+        rng.integers(45, 75)
+    ])
+
+    cv2.ellipse(img, (cx, cy), (ax, ay), sudut, 0, 360,
+                hijau.tolist(), -1)
+    cv2.ellipse(mask, (cx, cy), (ax, ay), sudut, 0, 360, 255, -1)
+
+    t = np.deg2rad(sudut)
+    p1 = (int(cx - ax * np.cos(t)), int(cy - ax * np.sin(t)))
+    p2 = (int(cx + ax * np.cos(t)), int(cy + ax * np.sin(t)))
+    tulang = (hijau * 1.35).clip(0, 255).tolist()
+
+    cv2.line(img, p1, p2, tulang, 3)
+
+    for k in np.linspace(-0.7, 0.7, 6):
+        bx = cx + k * ax * np.cos(t)
+        by = cy + k * ax * np.sin(t)
+
+        for arah in (-1, 1):
+            ex = bx + 0.35 * ax * np.cos(t + arah * 1.0)
+            ey = by + 0.35 * ax * np.sin(t + arah * 1.0)
+            cv2.line(img, (int(bx), int(by)),
+                     (int(ex), int(ey)), tulang, 1)
+
+    return mask
+
+
+def gambar_bercak(img, mask_daun, mask_bercak, kelas):
+    if kelas == "sehat":
+        return
+
+    n = (int(rng.integers(1, 4)) if kelas == "ringan"
+         else int(rng.integers(6, 13)))
+
+    r_min, r_maks = ((3, 7) if kelas == "ringan" else (5, 14))
+    ys, xs = np.where(mask_daun > 0)
+
+    for _ in range(n):
+        i = int(rng.integers(0, len(xs)))
+        r = int(rng.integers(r_min, r_maks + 1))
+        pusat = (int(xs[i]), int(ys[i]))
+
+        warna = [
+            int(rng.integers(70, 100)),
+            int(rng.integers(165, 190)),
+            int(rng.integers(185, 210))
+        ]
+
+        cv2.circle(img, pusat, r + 2, (40, 80, 110), -1)
+        cv2.circle(img, pusat, r, warna, -1)
+        cv2.circle(mask_bercak, pusat, r + 2, 255, -1)
+
+    mask_bercak &= mask_daun
+
+
+def ganggu_cahaya(img, kondisi):
+    f = img.astype(np.float32)
+
+    if kondisi == "gelap":
+        f = 255 * (f / 255) ** 2.0
+    elif kondisi == "terang":
+        f = 255 * (f / 255) ** 0.45
+    elif kondisi == "kontras_rendah":
+        f = 0.35 * f + 95
+    elif kondisi == "bayangan":
+        gx = np.linspace(1.15, 0.30, W, dtype=np.float32)
+        f = f * gx[None, :, None]
+
+    sigma = float(rng.uniform(6, 14))
+    f = f + rng.normal(0, sigma, f.shape)
+
+    return np.clip(f, 0, 255).astype(np.uint8)
+
+
+def main():
+    for sub in ["citra", "bersih", "mask_daun", "mask_bercak"]:
+        os.makedirs(os.path.join(OUT, sub), exist_ok=True)
+
+    baris = []
+    nomor = 0
+
+    for kelas in KELAS:
+        for j in range(N_PER_KELAS):
+            nomor += 1
+
+            latar = np.array([
+                rng.integers(150, 190),
+                rng.integers(170, 205),
+                rng.integers(185, 215)
+            ])
+
+            img = np.ones((H, W, 3), np.uint8) * latar.astype(np.uint8)
+            img = cv2.add(
+                img,
+                rng.integers(0, 12, (H, W, 3)).astype(np.uint8)
+            )
+
+            m_daun = np.zeros((H, W), np.uint8)
+            m_bercak = np.zeros((H, W), np.uint8)
+
+            gambar_daun(img, m_daun)
+            gambar_bercak(img, m_daun, m_bercak, kelas)
+
+            bersih = cv2.GaussianBlur(img, (3, 3), 0.8)
+            kondisi = KONDISI[j % len(KONDISI)]
+            citra = ganggu_cahaya(bersih, kondisi)
+            nama = f"teh_{nomor:03d}.png"
+
+            cv2.imwrite(os.path.join(OUT, "citra", nama), citra)
+            cv2.imwrite(os.path.join(OUT, "bersih", nama), bersih)
+            cv2.imwrite(os.path.join(OUT, "mask_daun", nama), m_daun)
+            cv2.imwrite(os.path.join(OUT, "mask_bercak", nama), m_bercak)
+
+            persen = 100 * (m_bercak > 0).sum() / max((m_daun > 0).sum(), 1)
+            baris.append([nama, kelas, kondisi, round(persen, 2)])
+
+    with open(os.path.join(OUT, "label.csv"), "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow([
+            "nama_file", "kelas", "kondisi_cahaya", "persen_bercak"
+        ])
+        w.writerows(baris)
+
+    print(f"Selesai: {nomor} citra tersimpan di {OUT}")
+
+
+if __name__ == "__main__":
+    main()
