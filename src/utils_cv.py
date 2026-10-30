@@ -1,1 +1,46 @@
-{"nbformat":4,"nbformat_minor":0,"metadata":{"colab":{"provenance":[],"authorship_tag":"ABX9TyMVz4J1tSpQNWnCBJDwem3b"},"kernelspec":{"name":"python3","display_name":"Python 3"},"language_info":{"name":"python"}},"cells":[{"cell_type":"code","execution_count":9,"metadata":{"id":"HoHlUfviWLzk","executionInfo":{"status":"ok","timestamp":1793358510479,"user_tz":-420,"elapsed":38,"user":{"displayName":"SALSYA PURITA NIDITIANI","userId":"00816041196831444194"}}},"outputs":[],"source":["\n","import numpy as np\n","import matplotlib.pyplot as plt\n","\n","\n","def baca(path):\n","    \"\"\"Membaca citra dan langsung memberi pesan jelas bila gagal.\"\"\"\n","    img = cv2.imread(path)\n","    if img is None:\n","        raise FileNotFoundError(f\"Citra tidak ditemukan: {path}\")\n","    return img\n","\n","\n","def tampil(daftar, judul, baris=1, ukuran=(14, 4)):\n","    \"\"\"Menampilkan beberapa citra berdampingan. Citra 3 kanal dianggap BGR.\"\"\"\n","    kolom = int(np.ceil(len(daftar) / baris))\n","    plt.figure(figsize=ukuran)\n","    for i, (im, jd) in enumerate(zip(daftar, judul)):\n","        plt.subplot(baris, kolom, i + 1)\n","        if im.ndim == 3:\n","            plt.imshow(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))\n","        else:\n","            plt.imshow(im, cmap=\"gray\", vmin=0, vmax=255)\n","        plt.title(jd)\n","        plt.axis(\"off\")\n","    plt.tight_layout()\n","\n","\n","def kontras_bercak(kanal, mask_daun, mask_bercak):\n","    \"\"\"KB = |rerata bercak - rerata daun sehat| / simpangan baku daun sehat.\n","    Makin besar KB, makin mudah bercak dipisahkan dari daun sehat.\"\"\"\n","    k = kanal.astype(np.float64)\n","    sehat = (mask_daun > 0) & (mask_bercak == 0)\n","    bercak = mask_bercak > 0\n","    if bercak.sum() == 0:\n","        return float(\"nan\")\n","    return abs(k[bercak].mean() - k[sehat].mean()) / (k[sehat].std() + 1e-6)\n","\n","\n","def statistik(gray):\n","    \"\"\"Ringkasan statistik intensitas untuk mendiagnosis mutu citra.\"\"\"\n","    return {\"rerata\": round(float(gray.mean()), 1),\n","            \"simpangan_baku\": round(float(gray.std()), 1),\n","            \"min\": int(gray.min()), \"maks\": int(gray.max()),\n","            \"persen_gelap\": round(100 * float((gray < 50).mean()), 1),\n","            \"persen_terang\": round(100 * float((gray > 205).mean()), 1)}"]}]}
+
+import numpy as np 
+import matplotlib.pyplot as plt 
+  
+  
+def baca(path): 
+    """Membaca citra dan langsung memberi pesan jelas bila gagal.""" 
+    img = cv2.imread(path) 
+    if img is None: 
+        raise FileNotFoundError(f"Citra tidak ditemukan: {path}") 
+    return img 
+  
+  
+def tampil(daftar, judul, baris=1, ukuran=(14, 4)): 
+    """Menampilkan beberapa citra berdampingan. Citra 3 kanal dianggap BGR.""" 
+    kolom = int(np.ceil(len(daftar) / baris)) 
+    plt.figure(figsize=ukuran) 
+    for i, (im, jd) in enumerate(zip(daftar, judul)): 
+        plt.subplot(baris, kolom, i + 1) 
+        if im.ndim == 3: 
+            plt.imshow(cv2.cvtColor(im, cv2.COLOR_BGR2RGB)) 
+        else: 
+            plt.imshow(im, cmap="gray", vmin=0, vmax=255) 
+        plt.title(jd) 
+        plt.axis("off") 
+    plt.tight_layout() 
+  
+  
+def kontras_bercak(kanal, mask_daun, mask_bercak): 
+    """KB = |rerata bercak - rerata daun sehat| / simpangan baku daun sehat. 
+    Makin besar KB, makin mudah bercak dipisahkan dari daun sehat.""" 
+    k = kanal.astype(np.float64) 
+    sehat = (mask_daun > 0) & (mask_bercak == 0) 
+    bercak = mask_bercak > 0 
+    if bercak.sum() == 0: 
+        return float("nan") 
+    return abs(k[bercak].mean() - k[sehat].mean()) / (k[sehat].std() + 1e-6) 
+  
+  
+def statistik(gray): 
+    """Ringkasan statistik intensitas untuk mendiagnosis mutu citra.""" 
+    return {"rerata": round(float(gray.mean()), 1), 
+            "simpangan_baku": round(float(gray.std()), 1), 
+            "min": int(gray.min()), "maks": int(gray.max()), 
+            "persen_gelap": round(100 * float((gray < 50).mean()), 1), 
+            "persen_terang": round(100 * float((gray > 205).mean()), 1)}
